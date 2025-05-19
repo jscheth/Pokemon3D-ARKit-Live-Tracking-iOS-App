@@ -22,6 +22,8 @@ class ViewController: UIViewController, ARSCNViewDelegate {
 
         let scene = SCNScene()
         sceneView.scene = scene
+        
+        sceneView.autoenablesDefaultLighting = true
     }
 
     override func viewWillAppear(_ animated: Bool) {
