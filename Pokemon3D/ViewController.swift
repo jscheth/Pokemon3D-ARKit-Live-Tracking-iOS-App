@@ -12,63 +12,83 @@ import ARKit
 class ViewController: UIViewController, ARSCNViewDelegate {
 
     @IBOutlet var sceneView: ARSCNView!
-    
+
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        // Set the view's delegate
         sceneView.delegate = self
-        
-        // Show statistics such as fps and timing information
+        sceneView.autoenablesDefaultLighting = true
         sceneView.showsStatistics = true
-        
-        // Create a new scene
-        let scene = SCNScene(named: "art.scnassets/ship.scn")!
-        
-        // Set the scene to the view
+
+        let scene = SCNScene()
         sceneView.scene = scene
     }
-    
+
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         
-        // Create a session configuration
-        let configuration = ARWorldTrackingConfiguration()
+        guard let trackingImages = ARReferenceImage.referenceImages(inGroupNamed: "Pokemon-Cards", bundle: Bundle.main) else {
+            print("❌ Failed to load image tracking resources.")
+            return
+        }
 
-        // Run the view's session
-        sceneView.session.run(configuration)
+        let configuration = ARImageTrackingConfiguration()
+        configuration.trackingImages = trackingImages
+        configuration.maximumNumberOfTrackedImages = 5 // Track up to 5 Pokémon cards at once
+        
+        sceneView.session.run(configuration, options: [.removeExistingAnchors, .resetTracking])
     }
-    
+
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        
-        // Pause the view's session
         sceneView.session.pause()
     }
 
     // MARK: - ARSCNViewDelegate
-    
-/*
-    // Override to create and configure nodes for anchors added to the view's session.
-    func renderer(_ renderer: SCNSceneRenderer, nodeFor anchor: ARAnchor) -> SCNNode? {
-        let node = SCNNode()
-     
-        return node
-    }
-*/
-    
-    func session(_ session: ARSession, didFailWithError error: Error) {
-        // Present an error message to the user
+
+    func renderer(_ renderer: SCNSceneRenderer, didAdd node: SCNNode, for anchor: ARAnchor) {
+        guard let imageAnchor = anchor as? ARImageAnchor else { return }
         
-    }
-    
-    func sessionWasInterrupted(_ session: ARSession) {
-        // Inform the user that the session has been interrupted, for example, by presenting an overlay
+        let referenceImage = imageAnchor.referenceImage
+        let imageName = referenceImage.name?.lowercased() ?? "unknown"
+        print("Detected image: \(imageName)")
         
-    }
-    
-    func sessionInterruptionEnded(_ session: ARSession) {
-        // Reset tracking and/or remove existing anchors if consistent tracking is required
+        // Visualize detected image with a semi-transparent plane
+        let plane = SCNPlane(width: referenceImage.physicalSize.width,
+                             height: referenceImage.physicalSize.height)
+        plane.firstMaterial?.diffuse.contents = UIColor.white.withAlphaComponent(0.3)
+        let planeNode = SCNNode(geometry: plane)
+        planeNode.eulerAngles.x = -.pi / 2
+        node.addChildNode(planeNode)
         
+        // Load the corresponding model
+        if let modelNode = loadModel(named: imageName) {
+            modelNode.position = SCNVector3Zero
+            
+            // Rotate model to face user (adjust if needed)
+            modelNode.eulerAngles.y = Float.pi // 180 degrees to face camera
+            
+            // Optional: make model always face the camera dynamically on Y-axis
+            let billboardConstraint = SCNBillboardConstraint()
+            billboardConstraint.freeAxes = [.Y]
+            modelNode.constraints = [billboardConstraint]
+            
+            planeNode.addChildNode(modelNode)
+        } else {
+            print("⚠️ No model found for \(imageName)")
+        }
     }
+
+
+    // MARK: - Helper
+
+    func loadModel(named name: String) -> SCNNode? {
+        let path = "art.scnassets/\(name).scn"
+        guard let scene = SCNScene(named: path) else {
+            print("❌ Could not load model at \(path)")
+            return nil
+        }
+        return scene.rootNode.childNodes.first
+    }
+
 }
